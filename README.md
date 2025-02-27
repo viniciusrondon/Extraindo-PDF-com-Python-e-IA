@@ -1,5 +1,5 @@
-Extraindo dados de PDFs com Python e IA
-
+ Extraindo dados de PDFs com Python e IA
+ 
  ---
  Tags: #fleeting 
  Description: Assistindo a live do Pycode BR
@@ -9,7 +9,7 @@ Extraindo dados de PDFs com Python e IA
 
 # <font color="#d7e3bc">Descrição breve: </font>
 
-Em 1990,  [Jown Warnock]((https://en.wikipedia.org/wiki/John_Warnock) começou a trabalhar em um projeto interno na Adobe. Com o objetivo de não apenas criar um formato de arquivo que tivesse a mesma aparência na tela como quando impresso, Warnock queria projetar um formato que permitisse aos usuários de computador compartilhar documentos com outras pessoas de maneira confiável e fácil, independentemente do sistema operacional que estivessem usando. Surgiu então o PDF(Portable Document Format).
+Em 1990,  [Jown Warnock](https://en.wikipedia.org/wiki/John_Warnock) começou a trabalhar em um projeto interno na Adobe. Com o objetivo de não apenas criar um formato de arquivo que tivesse a mesma aparência na tela como quando impresso, Warnock queria projetar um formato que permitisse aos usuários de computador compartilhar documentos com outras pessoas de maneira confiável e fácil, independentemente do sistema operacional que estivessem usando. Surgiu então o PDF(Portable Document Format).
 
 Um arquivo PDF é um tipo de arquivo digital que pode conter texto, imagens, gráficos, tabelas, hiperlinks, assinaturas digitais, entre outros.
 
@@ -111,6 +111,424 @@ print(text)
 	1. `pdf.pages` o `pages` é uma classe da biblioteca pdfplumber
 	2. `text += page.extract_text()` o texto será extraído e adicionado `+=` a variável `text` anteriormente declarada.
 
+# <font color="#76923c">Extração de tabelas</font>
+
+
+```
+pip install pdfplumber
+```
+
+
+```
+import pdfplumber
+
+pdf_path = 'pdfs/orcamento.pdf'
+
+table_row = []
+
+with pdfplumber.open(pdf_path) as pdf:
+	for page in pdf.pages:
+		tables = page.extract_tables()
+		for table in tables:
+			for row in table:
+				print(row)
+				table_row.append(row)
+table_row
+
+np.shape(table_row)
+```
+
+O interessante é que a extração retorna uma lista. 
+O `table_row` desta maneira conterá um conjunto de listas 
+`np.shape(table_row)` retornará (15, 4)
+
+# <font color="#76923c">Extraindo texto de PDF com imagem(scan)</font>
+
+
+```
+pip install pdf2image pytesseract
+```
+
+```
+import pytesseract
+from pdf2image import convert_from_path
+
+pdf_path = 'pdfs/orcamento_img.pdf'
+
+pages = convert_from_path(
+	pdf_path = pdf_path,
+)
+
+text_data = ''
+for page in pages:
+	text = pytesseract.image_to_string(page)
+	text_data += text + '\n'
+
+print(text_data)
+
+```
+
+
+Para extrair texto quando se trata de uma imagem com conteúdo textual é necessário passar por um processo de [[Optical Character Recognition (OCR) ]].
+
+
+# <font color="#92cddc">Extração de texto + RegEx para extrair dados</font>
+
+
+```
+pip install pdfplumber
+```
+
+```
+import pdfplumber
+import re
+
+pdf_path = 'pdfs/orçamento.pdf'
+
+text = ''
+with pdfplumber.open(pdf_path) as pdf:
+    for page in pdf.pages:
+        text += page.extract_text()
+
+name_regex = r"Nome:\s*(\w+\s\w+)"
+name = re.search(name_regex, text)
+
+address_regex = r"Endereco:\s*([\w\s,\.]+[\d]+(?:\s?-\s?[A-Za-z\s]+(?:,\s?[A-Za-z\s]+)*\s?-\s?[A-Za-z]{2,})?)"
+address = re.search(address_regex, text)
+
+date_regex = r"Data:\s*(\d{2}/\d{2}/\d{4})"
+date = re.search(date_regex, text)
+
+total_regex = r"TOTAL\s*R\$\s*([\d.,]+)"
+total = re.search(total_regex, text)
+
+if name:
+    print("Nome:", name.group(1))
+else:
+    print("Nome não encontrado")
+
+if address:
+    print("Endereço:", address.group(1))
+else:
+    print("Endereço não encontrado")
+
+if date:
+    print("Data:", date.group(1))
+else:
+    print("Data não encontrada")
+
+if total:
+    print("Valor Total:", total.group(1))
+else:
+    print("Valor Total não encontrado")
+```
+
+[RegEx](https://en.wikipedia.org/wiki/Regular_expression) são expressões regulares, sendo basicamente uma linguagem, que possui sintaxe própria utilizada para localizar trechos dentro de um texto padrão. [Um site excelente para produzir regex.](https://regex101.com/)
+
+Dado a extração do texto proveniente de um PDF o próximo passo seria encontrar um conteúdo ou algum trecho especifico, para isso foi utilizado regex para selecionar essa informação e armazenar em algum banco de dados ou json.
+
+No python existem um biblioteca nativa chamada `re` que serve para rodar expressões regulares.
+
+O grande problema enfrentado quando se coloca esse procedimento em produção esta no fato de que constante mente os documentos sofrem alterações nas suas formatações pelos usuários e empresas. 
+O passo a seguir resolve o problema que é ter que ficar constantemente alterando o regex constantemente utilizando IA para esse trabalho extenuante. 
+
+# <font color="#ff0000">Extração de texto + IA para extrair dados</font>
+
+Neste exemplo iremos extrair o texto de um PDF e envia-lo para uma IA que ira devolver o dado estruturado.
+
+
+```
+pip install pdfplumber python-dotenv langchain langchain_openai 
+
+# .env 
+OPENAI_API_KEY='API KEY'
+```
+
+### OBS:
+
+- `temperature` o parâmetro que controla a precisão das respostas, = 0 significa que retornará respostas o mais assertivas possível.
+
+- `template` é o que será inserido no prompt que será passado para IA.
+
+- Snake_case significa separar do dados por _ como é comum em python.
+
+- `chain = prompt | llm | JsonOutputParser()` essa sintaxe separada por OR( | ) tem um significado especifico dentro do framework da LangChain, onde neste caso entende como conectores, como um pipeline que foi construído. 
+- Neste caso ele ira utilizar o prompt, depois enviara o prompt para a llm e por fim essa resposta será parseada em Json.
+
+# <font color="#ff0000">Extração de texto (scan) + IA para extrair dado 2</font>
+
+
+```
+pip install pdf2image pytesseract python-dotenv langchain langchain_openai 
+
+# .env 
+OPENAI_API_KEY='API KEY'
+```
+
+```
+import pytesseract
+
+import os
+from dotenv import load_dotenv
+
+  
+
+from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_openai import ChatOpenAI
+from pdf2image import convert_from_path
+
+
+load_dotenv(dotenv_path=".env")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+
+pdf_path = 'pdfs/orçamento_img.pdf'
+
+
+pages = convert_from_path(
+    pdf_path=pdf_path,
+)
+
+
+text_data = ''
+for page in pages:
+    text = pytesseract.image_to_string(page)
+    text_data += text + '\n'
+
+
+llm = ChatOpenAI(
+    model='gpt-4o-mini',
+    temperature=0,
+    openai_api_key=openai_api_key
+)
+
+  
+
+template = """
+Extraia e retorne os seguintes dados do texto fornecido:
+- Nome
+- Endereço
+- Serviços
+    - Unidade
+    - Descrição
+    - Valor unitário
+    - Valor total do serviço
+- Valor total
+Retorne os dados no formato JSON com nomes dos campos em snake_case.
+{text}
+"""
+
+prompt = PromptTemplate(
+    input_variables=['text'],
+    template=template
+)
+
+
+chain = prompt | llm | JsonOutputParser()
+
+
+response = chain.invoke({'text': text})
+print(response)
+```
+
+
+
+# <font color="#ffff00">Extração de texto + IA para extrair dados genéricos</font>
+
+Neste exemplo foi dado um template genérico para que a própria IA identificasse os dados que poderiam ser relevantes sem que fosse especificado explicitamente.
+
+```
+pip install pdfplumber python-dotenv langchain langchain_openai 
+
+# .env 
+OPENAI_API_KEY='API KEY'
+```
+
+
+```
+import pdfplumber
+import os
+from dotenv import load_dotenv
+
+
+from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_openai import ChatOpenAI
+  
+
+load_dotenv(dotenv_path=".env")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+
+pdf_path = 'pdfs/boleto.pdf'
+
+text = ''
+with pdfplumber.open(pdf_path) as pdf:            
+    for page in pdf.pages:
+        text += page.extract_text()
+
+
+llm = ChatOpenAI(
+    model='gpt-4o-mini',
+    temperature=0,
+    openai_api_key=openai_api_key
+)
+
+  
+template = """
+Extraia e retorne as informações mais relevantes do texto fornecido:
+
+Retorne os dados no formato JSON com nomes dos campos em snake_case.
+{text}
+"""
+
+prompt = PromptTemplate(
+    input_variables=['text'],
+    template=template
+)
+
+  
+
+chain = prompt | llm | JsonOutputParser()
+
+  
+response = chain.invoke({'text': text})
+print(response)
+```
+
+O resultado foi satisfatório.
+
+# <font color="#ffff00">Extração de texto (Scan) + IA para extrair dados genéricos</font>
+
+
+```
+pip install pdf2image pytesseract python-dotenv langchain langchain_openai 
+
+# .env 
+OPENAI_API_KEY='API KEY'
+```
+
+```
+import pytesseract
+import os
+from dotenv import load_dotenv
+
+
+from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_openai import ChatOpenAI
+from pdf2image import convert_from_path
+
+
+load_dotenv(dotenv_path=".env")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+
+pdf_path = 'pdfs/orçamento_img.pdf'
+
+pages = convert_from_path(
+    pdf_path=pdf_path,
+)
+
+
+text_data = ''
+
+for page in pages:
+    text = pytesseract.image_to_string(page)
+    text_data += text + '\n'
+
+
+llm = ChatOpenAI(
+    model='gpt-4o-mini',
+    temperature=0,
+    openai_api_key=openai_api_key
+)
+
+  
+
+template = """
+Extraia e retorne as informações mais relevantes do texto fornecido:
+
+Retorne os dados no formato JSON com nomes dos campos em snake_case.
+{text}
+"""
+
+prompt = PromptTemplate(
+    input_variables=['text'],
+    template=template
+)
+
+  
+
+chain = prompt | llm | JsonOutputParser()
+
+response = chain.invoke({'text': text})
+print(response)
+```
+
+# <font color="#e36c09">Extrair texto + IA local com Ollama e modelo DeepSeek 32b para extrair dados</font>
+
+Após baixar o [Ollama](https://ollama.com/download) basta utilizar o código abaixo para rodar localmente sua IA:
+
+```
+ollama run deepseek-r1:32b
+```
+
+
+```
+pip install pdfplumber langchain langchain_ollama
+```
+
+
+```
+import pdfplumber
+
+
+from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_ollama.llms import OllamaLLM
+
+
+pdf_path = 'pdfs/boleto.pdf' 
+
+
+text = ''
+with pdfplumber.open(pdf_path) as pdf:
+    for page in pdf.pages:
+        text += page.extract_text()
+        
+
+llm = OllamaLLM(
+    model='deepseek-r1:32',
+    temperature=0,
+)
+
+
+template = """
+Extraia e retorne as informações mais relevantes do texto fornecido:
+
+Retorne os dados no formato JSON com nomes dos campos em snake_case.
+{text}
+"""
+
+  
+
+prompt = PromptTemplate(
+    input_variables=['text'],
+    template=template,
+)
+
+  
+
+chain = prompt | llm | JsonOutputParser()
+
+
+response = chain.invoke({'text': text})
+print(response)
+```
+
+
 
 
 
@@ -127,6 +545,12 @@ print(text)
 ## Referências
 - [Live 036](https://www.youtube.com/watch?v=YPuKikID98g) - Link da live
 - [Meu git](lhttps://github.com/viniciusrondon/Extraindo-PDF-com-Python-e-IA/tree/master) - github
+- [Um site excelente para produzir regex.](https://regex101.com/) - RegEx
+- [ferramenta para Json 01](https://jsonformatter.curiousconcept.com/#)
+- [ferramenta para json 02](https://jsoncrack.com/editor)
+- [ferramenta para json 03](https://todiagram.com/editor?utm_source=jsoncrack&utm_medium=upgrade_modal)
+- [Ollama](https://ollama.com/download)
+
 
 
 
