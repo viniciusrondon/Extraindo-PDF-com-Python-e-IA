@@ -14,7 +14,7 @@ with pdfplumber.open(pdf_path) as pdf:
         # break # pegar apenas página 1
 
 llm = OllamaLLM(
-    model='deepseek-r1:32',
+    model='deepseek-r1:32b',
     temperature=0,
 )
 
